@@ -1,0 +1,186 @@
+name: Build hb-subset
+
+on:
+  push:
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - name: linux-arm64-musl
+            runner: ubuntu-22.04
+            setup-action: |
+              - uses: jirutka/setup-alpine@v1
+                with:
+                  arch: aarch64
+                  branch: edge
+                  packages: >
+                    build-base
+                    clang
+                    cmake
+                    ninja
+                    meson
+                    freetype-dev
+                    harfbuzz-dev
+                    brotli-dev
+                    git
+            shell: alpine.sh {0}
+            artifact_suffix: -linux-arm64-musl
+            meson_extra_args: >
+
+          - name: linux-arm64-glibc
+            runner: ubuntu-24.04-arm
+            setup-action: |
+              - run: |
+                  sudo apt-get update
+                  sudo apt-get install -y \
+                    clang \
+                    lld \
+                    cmake \
+                    ninja-build \
+                    meson \
+                    pkg-config \
+                    libfreetype-dev \
+                    libharfbuzz-dev \
+                    libbrotli-dev
+            shell: bash
+            artifact_suffix: -linux-arm64-glibc
+            meson_extra_args: >
+
+          - name: linux-x64-musl
+            runner: ubuntu-22.04
+            setup-action: |
+              - uses: jirutka/setup-alpine@v1
+                with:
+                  branch: edge
+                  packages: >
+                    build-base
+                    clang
+                    cmake
+                    ninja
+                    meson
+                    freetype-dev
+                    harfbuzz-dev
+                    brotli-dev
+                    git
+            shell: alpine.sh {0}
+            artifact_suffix: -linux-x64-musl
+            meson_extra_args: >
+          - name: linux-x64-glibc
+            runner: ubuntu-22.04
+            setup-action: |
+              - run: |
+                  sudo apt-get update
+                  sudo apt-get install -y \
+                    clang \
+                    lld \
+                    cmake \
+                    ninja-build \
+                    meson \
+                    pkg-config \
+                    libfreetype-dev \
+                    libharfbuzz-dev \
+                    libbrotli-dev
+            shell: bash
+            artifact_suffix: -linux-x64-glibc
+            meson_extra_args: >
+
+          - name: macos-x64-intel
+            runner: macos-15-intel
+            setup-action: |
+              - run: |
+                  brew install llvm cmake ninja meson pkg-config freetype harfbuzz brotli
+                  echo "CMAKE_PREFIX_PATH=$(brew --prefix llvm)" >> $GITHUB_ENV
+                  echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
+                  echo "CXX=$(brew --prefix llvm)/bin/clang++" >> $GITHUB_ENV
+            shell: bash
+            artifact_suffix: -macos-x64-intel
+            meson_extra_args: >
+          - name: macos-arm64
+            runner: macos-latest
+            setup-action: |
+              - run: |
+                  brew install llvm cmake ninja meson pkg-config freetype harfbuzz brotli
+                  echo "CMAKE_PREFIX_PATH=$(brew --prefix llvm)" >> $GITHUB_ENV
+                  echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
+                  echo "CXX=$(brew --prefix llvm)/bin/clang++" >> $GITHUB_ENV
+            shell: bash
+            artifact_suffix: -macos-arm64
+            meson_extra_args: >
+
+          - name: windows-x64
+            runner: windows-latest
+            setup-action: |
+              - run: |
+                  choco install msys2 -y --no-progress
+                  C:\msys64\usr\bin\bash -lc "
+                    pacman -Syu --noconfirm
+                    pacman -S --needed --noconfirm \
+                      mingw-w64-ucrt-x86_64-toolchain \
+                      mingw-w64-ucrt-x86_64-clang \
+                      mingw-w64-ucrt-x86_64-cmake \
+                      mingw-w64-ucrt-x86_64-ninja \
+                      mingw-w64-ucrt-x86_64-meson \
+                      mingw-w64-ucrt-x86_64-freetype \
+                      mingw-w64-ucrt-x86_64-brotli
+                    "
+            shell: bash
+            artifact_suffix: -windows-x64.exe
+            meson_extra_args: --cross-file=ci/cross-windows-x64.txt
+          - name: windows-arm64
+            runner: windows-11-arm
+            setup-action: |
+              - run: |
+                  choco install msys2 -y --no-progress
+                  C:\msys64\usr\bin\bash -lc "
+                    pacman -Syu --noconfirm
+                    pacman -S --needed --noconfirm \
+                      mingw-w64-ucrt-aarch64-toolchain \
+                      mingw-w64-ucrt-aarch64-clang \
+                      mingw-w64-ucrt-aarch64-cmake \
+                      mingw-w64-ucrt-aarch64-ninja \
+                      mingw-w64-ucrt-aarch64-meson \
+                      mingw-w64-ucrt-aarch64-freetype \
+                      mingw-w64-ucrt-aarch64-brotli
+                    "
+            shell: bash
+            artifact_suffix: -windows-arm64.exe
+            meson_extra_args: --cross-file=ci/cross-windows-arm64.txt
+
+    runs-on: ${{ matrix.runner }}
+    name: Build ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup build environment
+        run: |
+          ${{ matrix.setup-action }}
+
+      - name: Configure with Meson
+        shell: ${{ matrix.shell || 'bash' }}
+        run: |
+          meson setup build \
+            --buildtype=release \
+            --optimization=3 \
+            --strip \
+            --default-library=static \
+            -Dc_link_args="-static" \
+            -Dcpp_link_args="-static" \
+            ${{ matrix.meson_extra_args }}
+
+      - name: Build with Ninja
+        shell: ${{ matrix.shell || 'bash' }}
+        run: |
+          ninja -C build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hb-subset-${{ matrix.name }}
+          path: build/hb-subset*
+          retention-days: 7
