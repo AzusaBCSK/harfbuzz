@@ -17,33 +17,39 @@ jobs:
             os: ubuntu-22.04
             arch: x86_64
             type: ubuntu-glibc
+            ext: "*.so*"
 
           - name: Linux ARM64 Glibc (Ubuntu)
             os: ubuntu-22.04-arm
             arch: aarch64
             type: ubuntu-glibc
+            ext: "*.so*"
 
           - name: Linux x64 Musl (Alpine)
             os: ubuntu-22.04
             arch: x86_64
             type: alpine
             apk_arch: x86_64
+            ext: "*.so*"
 
           - name: Linux ARM64 Musl (Alpine)
-            os: ubuntu-22.04-arm
+            os: ubuntu-22.04
             arch: aarch64
             type: alpine
             apk_arch: aarch64
+            ext: "*.so*"
 
           - name: macOS Intel
             os: macos-15-intel
             arch: x86_64
             type: macos
+            ext: "*.dylib"
 
           - name: macOS Apple Silicon
             os: macos-latest
             arch: arm64
             type: macos
+            ext: "*.dylib"
 
           - name: Windows x64 (UCRT64)
             os: windows-latest
@@ -51,6 +57,7 @@ jobs:
             type: windows
             msystem: UCRT64
             toolchain: mingw-w64-ucrt-x86_64
+            ext: "*.dll"
 
           - name: Windows ARM64 (CLANGARM64)
             os: windows-11-arm
@@ -58,6 +65,7 @@ jobs:
             type: windows
             msystem: CLANGARM64
             toolchain: mingw-w64-clang-aarch64
+            ext: "*.dll"
 
     defaults:
       run:
@@ -146,10 +154,11 @@ jobs:
               -Dbenchmark=disabled
             meson compile -C build
             meson test -C build
+            chmod -R 777 build
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: harfbuzz-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.type }}
-          path: build/src/*.so
+          path: build/src/${{ matrix.ext }}
           if-no-files-found: warn
